@@ -264,12 +264,14 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
         const message = value.messages[i]
         const contact = value.contacts[i] || value.contacts[0]
 
-        await processMessage(
-          message,
-          contact,
-          config.user_id,
-          decryptedAccessToken
-        )
+console.log("About to call processMessage")
+
+await processMessage(
+  message,
+  contact,
+  config.user_id,
+  decryptedAccessToken
+)
       }
     }
   }
@@ -494,7 +496,14 @@ async function processMessage(
   userId: string,
   accessToken: string
 ) {
+  console.log("processMessage called", {
+    messageId: message.id,
+    type: message.type,
+    from: message.from
+  })
+
   const senderPhone = normalizePhone(message.from)
+  console.log("Sender phone:", senderPhone)
   const contactName = contact.profile.name
 
   // Find or create contact
@@ -569,6 +578,17 @@ async function processMessage(
   // BEFORE we insert, so the count is accurate. Covers the case where
   // the contact row already exists (manual add / CSV import) but they've
   // never messaged us before — which new_contact_created wouldn't catch.
+
+const { count: priorCustomerMsgCount } = await supabaseAdmin()
+  .from('messages')
+  .select('id', { count: 'exact', head: true })
+  .eq('conversation_id', conversation.id)
+  .eq('sender_type', 'customer')
+
+const isFirstInboundMessage =
+  (priorCustomerMsgCount ?? 0) === 0
+
+
 console.log("Saving message to Supabase...", {
   conversation_id: conversation.id,
   message_id: message.id,
