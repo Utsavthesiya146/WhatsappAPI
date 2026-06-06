@@ -172,12 +172,22 @@ export async function POST(request: Request) {
   }
 
 let body: { entry?: WhatsAppWebhookEntry[] }
+
 try {
   body = JSON.parse(rawBody)
 
   console.log(
     "Webhook received:",
     JSON.stringify(body, null, 2)
+  )
+
+  console.log(
+    "Messages found:",
+    JSON.stringify(
+      body.entry?.[0]?.changes?.[0]?.value?.messages,
+      null,
+      2
+    )
   )
 
 } catch {
@@ -559,14 +569,16 @@ async function processMessage(
   // BEFORE we insert, so the count is accurate. Covers the case where
   // the contact row already exists (manual add / CSV import) but they've
   // never messaged us before — which new_contact_created wouldn't catch.
-  const { count: priorCustomerMsgCount } = await supabaseAdmin()
-    .from('messages')
-    .select('id', { count: 'exact', head: true })
-    .eq('conversation_id', conversation.id)
-    .eq('sender_type', 'customer')
-  const isFirstInboundMessage = (priorCustomerMsgCount ?? 0) === 0
+console.log("Saving message to Supabase...", {
+  conversation_id: conversation.id,
+  message_id: message.id,
+  content_type: contentType,
+  content_text: contentText,
+})
 
-  const { error: msgError } = await supabaseAdmin().from('messages').insert({
+const result = await supabaseAdmin()
+  .from('messages')
+  .insert({
     conversation_id: conversation.id,
     sender_type: 'customer',
     content_type: contentType,
@@ -582,10 +594,14 @@ async function processMessage(
     interactive_reply_id: interactiveReplyId,
   })
 
-  if (msgError) {
-    console.error('Error inserting message:', msgError)
-    return
-  }
+console.log("Supabase insert result:", result)
+
+const { error: msgError } = result
+
+if (msgError) {
+  console.error("MESSAGE INSERT ERROR:", msgError)
+  return
+}
 
   // Update conversation
   const { error: convError } = await supabaseAdmin()
